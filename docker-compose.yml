@@ -1,0 +1,12 @@
+services:
+  flyway:
+    image: flyway/flyway:9.22.0
+    volumes:
+      - ./resources/migration/sql:/flyway/sql
+      - ./resources/flyway.conf:/flyway/conf/flyway.conf
+    env_file:
+      - ./resources/env.properties
+    command: migrate
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    profiles: ["migrate"]
