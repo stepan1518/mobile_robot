@@ -1,0 +1,1 @@
+docker compose --profile migrate up --abort-on-container-exit flyway
