@@ -5,7 +5,7 @@ services:
       - ./resources/migration/sql:/flyway/sql
       - ./resources/flyway.conf:/flyway/conf/flyway.conf
     env_file:
-      - ./resources/env.properties
+      - ${ENV_PROPERTIES}
     command: migrate
     extra_hosts:
       - "host.docker.internal:host-gateway"

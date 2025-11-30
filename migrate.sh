@@ -1,1 +1,1 @@
-docker compose --profile migrate up --abort-on-container-exit flyway
+ENV_PROPERTIES=./resources/env.properties docker compose --profile migrate up --abort-on-container-exit flyway
