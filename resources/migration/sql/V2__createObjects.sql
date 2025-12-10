@@ -1,0 +1,15 @@
+CREATE TABLE IF NOT EXISTS body (
+    id int8 GENERATED ALWAYS AS IDENTITY NOT NULL,
+    x1 NUMERIC NOT NULL,
+    y1 NUMERIC NOT NULL,
+    x2 NUMERIC NOT NULL,
+    y2 NUMERIC NOT NULL,
+    CONSTRAINT body_pkey PRIMARY KEY (id)
+);
+
+CREATE TABLE IF NOT EXISTS building (
+    name VARCHAR(255) NOT NULL,
+    body_id int8 NOT NULL,
+    CONSTRAINT building_pkey PRIMARY KEY (name),
+    CONSTRAINT building_body_fkey FOREIGN KEY (body_id) REFERENCES body(id)
+);

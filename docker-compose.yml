@@ -5,7 +5,6 @@ services:
       dockerfile: Dockerfile.flyway
     volumes:
       - ./resources/migration/sql:/flyway/sql
-      - ./resources/migration/callbacks:/flyway/sql/callbacks/
       - ./resources/flyway.conf:/flyway/conf/flyway.conf
     env_file:
       - ${ENV_PROPERTIES}
