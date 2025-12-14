@@ -103,7 +103,7 @@ def main() -> int:
     try:
         with engine.connect() as conn:
             with conn.begin():
-                print("Clear building and body tables...")
+                print("Чистим таблицы объектов...")
                 conn.execute(sa.text("DELETE FROM building"))
                 conn.execute(sa.text("DELETE FROM body"))
 
@@ -131,7 +131,7 @@ def main() -> int:
                         "body_id": body_id
                     })
 
-            print("Insert all completed")
+            print("✅ Объекты успешно импортированы")
     except Exception as e:
         print(f"Error: {e}")
         return -1
