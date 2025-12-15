@@ -1,3 +1,3 @@
-from .RobotAbstractFactory import RobotAbstractFactory
+from .ZMQRobotAbstractFactory import ZMQRobotAbstractFactory
 
-__all__ = ['RobotAbstractFactory']
+__all__ = ['ZMQRobotAbstractFactory']

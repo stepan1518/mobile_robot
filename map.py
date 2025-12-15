@@ -1,17 +1,17 @@
 from db import DBAbstractFactory
 from map import Map
-from robot import RobotAbstractFactory
+from robot import ZMQRobotAbstractFactory
 import matplotlib.pyplot as plt
 
 
 edges = []
 
-factory = RobotAbstractFactory()
+factory = ZMQRobotAbstractFactory()
 robot = factory.createRobot()
 
 db_connection = DBAbstractFactory.createDBConnection()
 city_map = Map(db_connection)
-path = city_map.findShortestPath(robot.getCurrentPosition(), 'dummy_14')
+path = city_map.findShortestPath(955, 1076)
 
 plt.scatter([v[1][0] for v in city_map.vertices.items()], [v[1][1] for v in city_map.vertices.items()])
 for v_name in city_map.vertices.keys():
@@ -42,7 +42,13 @@ plt.show()
 
 plt.show()
 
-for nextDummy in path[1:]:
-    robot.moveToPoint(nextDummy)
+path_to_execute = []
+for id in path:
+    x, y = city_map.vertices[id]
+    path_to_execute.append((id, x, y))
+
+robot.execute_path(path_to_execute)
+# for nextDummy in path:
+#     robot.moveToPoint(city_map.vertices[nextDummy])
 
 print('Робот прибыл')

@@ -61,7 +61,8 @@ def parse_buildings():
             continue
 
         # Позиция body в мировых координатах
-        pos = sim.getObjectPosition(body_handle, -1)  # -1 = относительно мира
+        floor_handle = sim.getObject(f'./floor')
+        pos = sim.getObjectPosition(body_handle, floor_handle)
         cx, cy, cz = pos
 
         # Локальный BB body

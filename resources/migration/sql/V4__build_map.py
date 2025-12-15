@@ -4,6 +4,7 @@ import math
 import sys
 import sqlalchemy as sa
 import os
+import pygame
 
 # Цвета
 WHITE = (255, 255, 255)
@@ -265,10 +266,10 @@ class PRM:
         margin_y = height * margin_ratio
 
         return (
-            min_x - margin_x,
-            min_y - margin_y,
-            max_x + margin_x,
-            max_y + margin_y
+            min_x,
+            min_y,
+            max_x,
+            max_y
         )
 
     def real_to_screen(self, point, map_bounds, screen_size):
@@ -439,125 +440,98 @@ class PRM:
         self.engine.dispose()
 
 
+def real_to_screen(point, map_bounds, screen_size):
+    min_x, min_y, max_x, max_y = map_bounds
+    screen_width, screen_height = screen_size
+
+    x, y = point
+    screen_x = (x - min_x) / (max_x - min_x) * screen_width
+    screen_y = (y - min_y) / (max_y - min_y) * screen_height
+    screen_y = screen_height - screen_y  # Инверсия Y
+
+    return (int(screen_x), int(screen_y))
+
+
+def draw_roadmap(screen, prm, map_bounds):
+    screen.fill(WHITE)
+    screen_width, screen_height = screen.get_size()
+
+    # 1. Рисуем здания (препятствия)
+    for obstacle in prm.obstacles:
+        ox, oy, ow, oh = obstacle
+
+        corners = [
+            (ox, oy),
+            (ox + ow, oy),
+            (ox + ow, oy + oh),
+            (ox, oy + oh)
+        ]
+
+        screen_corners = [real_to_screen(p, map_bounds, (screen_width, screen_height)) for p in corners]
+
+        pygame.draw.polygon(screen, DARK_GRAY, screen_corners)  # Заливка
+        pygame.draw.polygon(screen, BLACK, screen_corners, 3)   # Контур
+
+    # 2. Рисуем рёбра графа (серые линии)
+    for node, neighbors in prm.graph.items():
+        screen_node = real_to_screen(node, map_bounds, (screen_width, screen_height))
+        for neighbor, _ in neighbors:
+            # Чтобы не рисовать каждое ребро дважды
+            if neighbor > node:  # простая проверка по координатам
+                continue
+            screen_neighbor = real_to_screen(neighbor, map_bounds, (screen_width, screen_height))
+            pygame.draw.line(screen, GRAY, screen_node, screen_neighbor, 2)
+
+    # 3. Рисуем узлы (синие точки с белой серединой)
+    for node in prm.nodes:
+        screen_node = real_to_screen(node, map_bounds, (screen_width, screen_height))
+        pygame.draw.circle(screen, BLUE, screen_node, 5)
+        pygame.draw.circle(screen, WHITE, screen_node, 2)
+
+    # Инфо в углу
+    font = pygame.font.SysFont('arial', 16)
+    text = font.render(f"Nodes: {len(prm.nodes)} | Edges: {sum(len(n) for n in prm.graph.values())//2}", True, BLACK)
+    screen.blit(text, (10, 10))
+
+
 def main():
-    # pygame.init()
+    pygame.init()
     SCREEN_WIDTH, SCREEN_HEIGHT = 1200, 800
-    # screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
-    # pygame.display.set_caption("PRM Map Builder - Courier Robot Navigation")
-    # clock = pygame.time.Clock()
+    screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+    pygame.display.set_caption("PRM Roadmap Visualization")
+    clock = pygame.time.Clock()
 
-    # Создаем PRM с реальными координатами
-    prm = PRM(
-        n_samples=300,
-    )
+    print("Строим PRM карту из базы данных...")
+    prm = PRM(n_samples=300)
 
-    roadmap = prm.build_roadmap()
+    if prm.status == -1:
+        print("Ошибка подключения к БД")
+        return
 
+    print(f"Построено узлов: {len(prm.nodes)}")
+    print(f"Рёбер: {sum(len(neighbors) for neighbors in prm.graph.values()) // 2}")
+
+    # Сохраняем в БД
     prm.flush()
     prm.close()
 
-    # Переменные для визуализации
-    # animation_speed = 10  # шагов в кадр
-    # current_step = 0
-    # show_animation = True
-    # animation_finished = False
-    #
-    # # Точки для навигации (в реальных координатах)
-    # start_point = None
-    # end_point = None
-    # current_path = None
-    #
-    # # Для отладки: покажем границы
-    # print(f"Number of obstacles: {len(obstacles)}")
-    # print(f"Number of PRM nodes: {len(prm.nodes)}")
-    #
-    # running = True
-    # while running:
-    #     for event in pygame.event.get():
-    #         if event.type == pygame.QUIT:
-    #             running = False
-    #         elif event.type == pygame.KEYDOWN:
-    #             if event.key == pygame.K_r:
-    #                 # Перестроить карту
-    #                 prm = PRM(
-    #                     map_bounds=map_bounds,
-    #                     obstacles=obstacles,
-    #                     n_samples=400,
-    #                     connection_radius=connection_radius
-    #                 )
-    #                 roadmap = prm.build_roadmap()
-    #                 current_step = 0
-    #                 animation_finished = False
-    #                 start_point = None
-    #                 end_point = None
-    #                 current_path = None
-    #             elif event.key == pygame.K_SPACE:
-    #                 # Пропустить анимацию/показать полную карту
-    #                 show_animation = not show_animation
-    #             elif event.key == pygame.K_c:
-    #                 # Очистить путь
-    #                 current_path = None
-    #                 start_point = None
-    #                 end_point = None
-    #             elif event.key == pygame.K_p:
-    #                 # Случайные точки для пути (в реальных координатах)
-    #                 if prm.nodes:
-    #                     start_point = random.choice(prm.nodes)
-    #                     end_point = random.choice(prm.nodes)
-    #                     while end_point == start_point:
-    #                         end_point = random.choice(prm.nodes)
-    #                     current_path = prm.find_path(start_point, end_point)
-    #                     if current_path:
-    #                         print(f"Path found with {len(current_path)} points")
-    #                     else:
-    #                         print("No path found")
-    #             elif event.key == pygame.K_d:
-    #                 # Отладочная информация
-    #                 print(f"Map bounds: {map_bounds}")
-    #                 print(f"Screen size: {SCREEN_WIDTH}x{SCREEN_HEIGHT}")
-    #                 print(f"Start: {start_point}, End: {end_point}")
-    #                 print(f"Path length: {len(current_path) if current_path else 0}")
-    #
-    #         elif event.type == pygame.MOUSEBUTTONDOWN:
-    #             # Преобразуем экранные координаты в реальные
-    #             screen_point = event.pos
-    #             real_point = screen_to_real(screen_point, map_bounds, (SCREEN_WIDTH, SCREEN_HEIGHT))
-    #
-    #             if event.button == 1:  # Левая кнопка - старт
-    #                 start_point = real_point
-    #                 print(f"Start point set: {real_point}")
-    #                 if end_point:
-    #                     current_path = prm.find_path(start_point, end_point)
-    #                     if current_path:
-    #                         print(f"Path found with {len(current_path)} points")
-    #                     else:
-    #                         print("No path found")
-    #             elif event.button == 3:  # Правая кнопка - финиш
-    #                 end_point = real_point
-    #                 print(f"End point set: {real_point}")
-    #                 if start_point:
-    #                     current_path = prm.find_path(start_point, end_point)
-    #                     if current_path:
-    #                         print(f"Path found with {len(current_path)} points")
-    #                     else:
-    #                         print("No path found")
-    #
-    #     # Обновление анимации
-    #     if show_animation and not animation_finished:
-    #         current_step += animation_speed
-    #         if current_step >= len(prm.visualization_steps):
-    #             current_step = len(prm.visualization_steps)
-    #             animation_finished = True
-    #
-    #     # Отрисовка
-    #     draw_roadmap(screen, prm, map_bounds, current_step, show_animation,
-    #                  current_path, start_point, end_point)
-    #
-    #     pygame.display.flip()
-    #     clock.tick(60)
-    #
-    # pygame.quit()
-    # sys.exit()
+    running = True
+    while running:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    running = False
+
+        # Отрисовка
+        draw_roadmap(screen, prm, prm.map_bounds)
+
+        pygame.display.flip()
+        clock.tick(30)
+
+    pygame.quit()
+    sys.exit()
 
 
 if __name__ == "__main__":

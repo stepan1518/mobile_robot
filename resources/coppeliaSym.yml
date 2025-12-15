@@ -1,7 +1,0 @@
-connection:
-  connectionAddress: 127.0.0.1
-  connectionPort: 19997
-  waitUntilConnected: True
-  doNotReconnectOnceDisconnected: True
-  timeOutInMs: 2000
-  commThreadCycleInMs: 5

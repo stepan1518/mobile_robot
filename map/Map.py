@@ -9,9 +9,9 @@ class Map:
 
     def __init__(self, db_connection):
         self.dbConnection = db_connection
-        result = self.dbConnection.execute("SELECT p.x, p.y, p2.x, p2.y, p.name, p2.name FROM point p "
-                                    "LEFT JOIN edje e ON p.name = e.parent_id "
-                                    "LEFT JOIN point p2 ON p2.name = e.child_id")
+        result = self.dbConnection.execute("SELECT p.x, p.y, p2.x, p2.y, p.id, p2.id FROM point p "
+                                    "LEFT JOIN edge e ON p.id = e.parent_id "
+                                    "LEFT JOIN point p2 ON p2.id = e.child_id")
 
         self.edges = []
         for row in result:
@@ -21,59 +21,59 @@ class Map:
         self.graph = {}
 
         for edge in self.edges:
-            x1, y1, x2, y2, name1, name2 = edge
+            x1, y1, x2, y2, id1, id2 = edge
 
             # Рассчитываем расстояние между точками
             if x1 is not None and y1 is not None and x2 is not None and y2 is not None:
                 distance = ((float(x2) - float(x1)) ** 2 + (float(y2) - float(y1)) ** 2) ** 0.5
 
                 # Добавляем ребро в обе стороны (ненаправленный граф)
-                if name1 not in self.graph:
-                    self.graph[name1] = {}
-                if name2 not in self.graph:
-                    self.graph[name2] = {}
+                if id1 not in self.graph:
+                    self.graph[id1] = {}
+                if id2 not in self.graph:
+                    self.graph[id2] = {}
 
-                self.graph[name1][name2] = distance
-                self.graph[name2][name1] = distance
+                self.graph[id1][id2] = distance
+                self.graph[id2][id1] = distance
 
         self.vertices = {}
         for edje in self.edges:
-            x1, y1, x2, y2, p1_name, p2_name = edje
+            x1, y1, x2, y2, id1, id2 = edje
 
-            self.vertices[p1_name] = (float(x1), float(y1))
+            self.vertices[id1] = (float(x1), float(y1))
             if x2 and y2:
-                self.vertices[p2_name] = (float(x2), float(y2))
+                self.vertices[id2] = (float(x2), float(y2))
 
-    def findShortestPath(self, start_name, end_name):
+    def findShortestPath(self, start_id, end_id):
         """
             Находит кратчайший путь между двумя точками с помощью алгоритма Дейкстры.
 
             Args:
                 edges: список ребер в формате [x1, y1, x2, y2, name1, name2]
-                start_name: название начальной точки
-                end_name: название конечной точки
+                start_id: название начальной точки
+                end_id: название конечной точки
 
             Returns:
                 list: массив названий точек, составляющих кратчайший путь
                       или None, если путь не найден
             """
         # Проверяем, что начальная и конечная точки существуют в графе
-        if start_name not in self.graph or end_name not in self.graph:
+        if start_id not in self.graph or end_id not in self.graph:
             return None
 
         # Инициализация
         distances = {node: float('infinity') for node in self.graph}
-        distances[start_name] = 0
+        distances[start_id] = 0
         previous_nodes = {node: None for node in self.graph}
 
         # Приоритетная очередь (бинарная куча)
-        priority_queue = [(0, start_name)]
+        priority_queue = [(0, start_id)]
 
         while priority_queue:
             current_distance, current_node = heapq.heappop(priority_queue)
 
             # Если достигли конечной точки, строим путь
-            if current_node == end_name:
+            if current_node == end_id:
                 path = []
                 while current_node is not None:
                     path.append(current_node)
