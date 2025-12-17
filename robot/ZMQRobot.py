@@ -3,11 +3,11 @@ import numpy as np
 
 
 class ZMQRobot:
-    robotName = 'RobaBoba'
+    robotName = 'MobileRobot'
     target_point = 'roba_boba_point'
     floor = 'floor'
     connection = None
-    distanceTreshHold = 0.21
+    distanceTreshHold = 0.31
 
     def __init__(self, connection):
         self.connection = connection
@@ -96,3 +96,6 @@ class ZMQRobot:
             for handle in created_dummies:
                 self.sim.removeObject(handle)
             print("Все waypoint'ы удалены.")
+
+    def getPosition(self):
+        return self.sim.getObjectPosition(self.robot_handle, self.floor_handle)

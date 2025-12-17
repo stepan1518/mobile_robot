@@ -1,3 +1,5 @@
+import numpy as np
+
 from db import DBAbstractFactory
 from map import Map
 from robot import ZMQRobotAbstractFactory
@@ -11,7 +13,23 @@ robot = factory.createRobot()
 
 db_connection = DBAbstractFactory.createDBConnection()
 city_map = Map(db_connection)
-path = city_map.findShortestPath(955, 1076)
+robot_pos = robot.getPosition()
+city_map.vertices[-1] = (robot_pos[0], robot_pos[1])
+
+city_map.graph[-1] = {}
+for point_id in city_map.vertices.keys():
+    x, y = city_map.vertices[point_id]
+    diff = np.array([x, y]) - np.array(robot_pos[:2])
+    distance = np.sqrt(diff.dot(diff))
+
+    if distance <= 5:
+        city_map.edges.append((x, y, robot_pos[0], robot_pos[1], point_id, -1))
+        city_map.edges.append((robot_pos[0], robot_pos[1], x, y, -1, point_id))
+
+        city_map.graph[point_id][-1] = distance
+        city_map.graph[-1][point_id] = distance
+
+path = city_map.findShortestPath(-1, 1118)
 
 plt.scatter([v[1][0] for v in city_map.vertices.items()], [v[1][1] for v in city_map.vertices.items()])
 for v_name in city_map.vertices.keys():
