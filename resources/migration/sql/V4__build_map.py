@@ -1,10 +1,8 @@
-# import pygame
 import random
 import math
 import sys
 import sqlalchemy as sa
 import os
-import pygame
 
 # Цвета
 WHITE = (255, 255, 255)
@@ -67,6 +65,9 @@ class PRM:
         self.connection_radius = diagonal * 0.1
 
         self.build_roadmap()
+
+    def __del__(self):
+        self.close()
 
     def get_buildings(self):
         buildings = []
@@ -321,75 +322,6 @@ class PRM:
 
         return (real_x, real_y)
 
-    def draw_roadmap(screen, prm, map_bounds, current_step=0, show_animation=True,
-                     path=None, start_point=None, end_point=None):
-        """Отрисовывает карту PRM с преобразованием координат"""
-        # screen.fill(WHITE)
-        #
-        # screen_size = screen.get_size()
-        #
-        # # Рисуем препятствия (преобразуем в экранные координаты)
-        # for obstacle in prm.obstacles:
-        #     ox, oy, w, h = obstacle
-        #
-        #     # Получаем углы прямоугольника
-        #     corners = [
-        #         (ox, oy),
-        #         (ox + w, oy),
-        #         (ox + w, oy + h),
-        #         (ox, oy + h)
-        #     ]
-        #
-        #     # Преобразуем в экранные координаты
-        #     screen_corners = [real_to_screen(p, map_bounds, screen_size) for p in corners]
-        #
-        #     # Рисуем заливку
-        #     pygame.draw.polygon(screen, DARK_GRAY, screen_corners)
-        #     # Рисуем контур
-        #     pygame.draw.polygon(screen, BLACK, screen_corners, 2)
-        #
-        # if show_animation and current_step < len(prm.visualization_steps):
-        #     # Анимированное построение
-        #     for step_type, data in prm.visualization_steps[:current_step]:
-        #         if step_type == 'point':
-        #             screen_point = real_to_screen(data, map_bounds, screen_size)
-        #             pygame.draw.circle(screen, BLUE, screen_point, 3)
-        #         elif step_type == 'edge':
-        #             screen_p1 = real_to_screen(data[0], map_bounds, screen_size)
-        #             screen_p2 = real_to_screen(data[1], map_bounds, screen_size)
-        #             pygame.draw.line(screen, GRAY, screen_p1, screen_p2, 1)
-        # else:
-        #     # Полная отрисовка
-        #     # Сначала рёбра
-        #     for node, neighbors in prm.graph.items():
-        #         screen_node = real_to_screen(node, map_bounds, screen_size)
-        #         for neighbor, cost in neighbors:
-        #             screen_neighbor = real_to_screen(neighbor, map_bounds, screen_size)
-        #             pygame.draw.line(screen, GRAY, screen_node, screen_neighbor, 2)
-        #
-        #     # Потом узлы
-        #     for node in prm.nodes:
-        #         screen_node = real_to_screen(node, map_bounds, screen_size)
-        #         pygame.draw.circle(screen, BLUE, screen_node, 4)
-        #         pygame.draw.circle(screen, WHITE, screen_node, 2)
-        #
-        # # Рисуем путь если есть
-        # if path and len(path) > 1:
-        #     for i in range(len(path) - 1):
-        #         screen_p1 = real_to_screen(path[i], map_bounds, screen_size)
-        #         screen_p2 = real_to_screen(path[i + 1], map_bounds, screen_size)
-        #         pygame.draw.line(screen, GREEN, screen_p1, screen_p2, 4)
-        #
-        # # Рисуем стартовую и конечную точки
-        # if start_point:
-        #     screen_start = real_to_screen(start_point, map_bounds, screen_size)
-        #     pygame.draw.circle(screen, GREEN, screen_start, 10)
-        #     pygame.draw.circle(screen, WHITE, screen_start, 4)
-        # if end_point:
-        #     screen_end = real_to_screen(end_point, map_bounds, screen_size)
-        #     pygame.draw.circle(screen, RED, screen_end, 10)
-        #     pygame.draw.circle(screen, WHITE, screen_end, 4)
-
     def flush(self):
         saved_points = {}
 
@@ -440,67 +372,7 @@ class PRM:
         self.engine.dispose()
 
 
-def real_to_screen(point, map_bounds, screen_size):
-    min_x, min_y, max_x, max_y = map_bounds
-    screen_width, screen_height = screen_size
-
-    x, y = point
-    screen_x = (x - min_x) / (max_x - min_x) * screen_width
-    screen_y = (y - min_y) / (max_y - min_y) * screen_height
-    screen_y = screen_height - screen_y  # Инверсия Y
-
-    return (int(screen_x), int(screen_y))
-
-
-def draw_roadmap(screen, prm, map_bounds):
-    screen.fill(WHITE)
-    screen_width, screen_height = screen.get_size()
-
-    # 1. Рисуем здания (препятствия)
-    for obstacle in prm.obstacles:
-        ox, oy, ow, oh = obstacle
-
-        corners = [
-            (ox, oy),
-            (ox + ow, oy),
-            (ox + ow, oy + oh),
-            (ox, oy + oh)
-        ]
-
-        screen_corners = [real_to_screen(p, map_bounds, (screen_width, screen_height)) for p in corners]
-
-        pygame.draw.polygon(screen, DARK_GRAY, screen_corners)  # Заливка
-        pygame.draw.polygon(screen, BLACK, screen_corners, 3)   # Контур
-
-    # 2. Рисуем рёбра графа (серые линии)
-    for node, neighbors in prm.graph.items():
-        screen_node = real_to_screen(node, map_bounds, (screen_width, screen_height))
-        for neighbor, _ in neighbors:
-            # Чтобы не рисовать каждое ребро дважды
-            if neighbor > node:  # простая проверка по координатам
-                continue
-            screen_neighbor = real_to_screen(neighbor, map_bounds, (screen_width, screen_height))
-            pygame.draw.line(screen, GRAY, screen_node, screen_neighbor, 2)
-
-    # 3. Рисуем узлы (синие точки с белой серединой)
-    for node in prm.nodes:
-        screen_node = real_to_screen(node, map_bounds, (screen_width, screen_height))
-        pygame.draw.circle(screen, BLUE, screen_node, 5)
-        pygame.draw.circle(screen, WHITE, screen_node, 2)
-
-    # Инфо в углу
-    font = pygame.font.SysFont('arial', 16)
-    text = font.render(f"Nodes: {len(prm.nodes)} | Edges: {sum(len(n) for n in prm.graph.values())//2}", True, BLACK)
-    screen.blit(text, (10, 10))
-
-
 def main():
-    pygame.init()
-    SCREEN_WIDTH, SCREEN_HEIGHT = 1200, 800
-    screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
-    pygame.display.set_caption("PRM Roadmap Visualization")
-    clock = pygame.time.Clock()
-
     print("Строим PRM карту из базы данных...")
     prm = PRM(n_samples=300)
 
@@ -513,24 +385,7 @@ def main():
 
     # Сохраняем в БД
     prm.flush()
-    prm.close()
 
-    running = True
-    while running:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                running = False
-            elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_ESCAPE:
-                    running = False
-
-        # Отрисовка
-        draw_roadmap(screen, prm, prm.map_bounds)
-
-        pygame.display.flip()
-        clock.tick(30)
-
-    pygame.quit()
     sys.exit()
 
 

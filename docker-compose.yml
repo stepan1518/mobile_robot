@@ -6,6 +6,7 @@ services:
     volumes:
       - ./resources/migration/sql:/flyway/sql
       - ./resources/flyway.conf:/flyway/conf/flyway.conf
+      - ./zmqRemoteApi:/coppeliaSim/zmqRemoteApi
     env_file:
       - ${ENV_PROPERTIES}
     command: migrate

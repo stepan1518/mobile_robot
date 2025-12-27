@@ -8,3 +8,5 @@ ENV PATH="/flyway/venv/bin:$PATH"
 RUN pip install --no-cache-dir \
     sqlalchemy==2.0.44 \
     psycopg2-binary==2.9.11 \
+    cbor2==5.7.1 \
+    pyzmq==27.1.0 \

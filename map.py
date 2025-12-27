@@ -1,3 +1,5 @@
+import random
+
 import numpy as np
 
 from db import DBAbstractFactory
@@ -29,7 +31,8 @@ for point_id in city_map.vertices.keys():
         city_map.graph[point_id][-1] = distance
         city_map.graph[-1][point_id] = distance
 
-path = city_map.findShortestPath(-1, 1118)
+ids = city_map.vertices.keys()
+path = city_map.findShortestPath(-1, random.choice(ids))
 
 plt.scatter([v[1][0] for v in city_map.vertices.items()], [v[1][1] for v in city_map.vertices.items()])
 for v_name in city_map.vertices.keys():

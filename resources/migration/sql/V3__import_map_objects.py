@@ -2,13 +2,15 @@ import os
 import sys
 import sqlalchemy as sa
 
-sys.path.insert(0, '/home/steppp1518/Projects/mobile_robot/zmqRemoteApi/clients/python/src')
+sys.path.insert(0, '/coppeliaSim/zmqRemoteApi/clients/python/src')
 
 from coppeliasim_zmqremoteapi_client import RemoteAPIClient
 
+ZMQ_HOST = os.getenv('FLYWAY_HOST')
+
 def parse_buildings():
     print("Подключаемся к CoppeliaSim...")
-    client = RemoteAPIClient()
+    client = RemoteAPIClient(host=ZMQ_HOST)
     sim = client.getObject('sim')
     print("ПОДКЛЮЧЕНО!")
 
