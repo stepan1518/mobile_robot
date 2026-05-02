@@ -40,10 +40,13 @@ class PRM:
         self.engine = sa.create_engine(url)
 
         buildings = self.get_buildings()
-        if buildings == -1:
+        roads = self.get_roads()
+        pedestrian_crossings = self.get_pedestrian_crossings()
+        if buildings == -1 or roads == -1 or pedestrian_crossings == -1:
             self.status = -1
 
         # Преобразуем в формат (x, y, width, height) в реальных координатах
+        # Препятствия
         self.obstacles = [
             (
                 float(b['x1']),
@@ -52,6 +55,25 @@ class PRM:
                 float(b['y2']) - float(b['y1'])
             )
             for b in buildings
+        ]
+
+        for road in roads:
+            self.obstacles.append((
+                float(road['x1']),
+                float(road['y1']),
+                float(road['x2']) - float(road['x1']),
+                float(road['y2']) - float(road['y1'])
+            ))
+
+        #Мосты (пешеходные переходы, мосты через реку и тп)
+        self.bridges = [
+            (
+                float(pc['x1']),
+                float(pc['y1']),
+                float(pc['x2']) - float(pc['x1']),
+                float(pc['y2']) - float(pc['y1'])
+            )
+            for pc in pedestrian_crossings
         ]
 
         self.map_bounds = self.get_map_bounds(buildings, margin_ratio=0.1)
@@ -83,11 +105,41 @@ class PRM:
 
         return buildings
 
+    def get_roads(self):
+        roads = []
+
+        try:
+            with self.engine.connect() as conn:
+                request = sa.text("""SELECT * FROM road r JOIN body b ON b.id = r.body_id""")
+                result = conn.execute(request)
+                roads = [dict(row._mapping) for row in result]
+        except Exception as e:
+            print(f"Error: {e}")
+            return -1
+
+        return roads
+
+    def get_pedestrian_crossings(self):
+        pedestrian_crossings = []
+
+        try:
+            with self.engine.connect() as conn:
+                request = sa.text("""SELECT * FROM pedestrian_crossing pc JOIN body b ON b.id = pc.body_id""")
+                result = conn.execute(request)
+                pedestrian_crossings = [dict(row._mapping) for row in result]
+        except Exception as e:
+            print(f"Error: {e}")
+            return -1
+
+        return pedestrian_crossings
+
     def build_roadmap(self):
         """Строит вероятностную дорожную карту"""
         self.nodes = []
         self.graph = {}
         self.visualization_steps = []
+
+        self.add_bridge_edges()
 
         # 1. Генерация случайных точек
         self.generate_free_points()
@@ -123,12 +175,38 @@ class PRM:
             for j, node2 in enumerate(self.nodes):
                 if i < j and self.distance(node1, node2) <= self.connection_radius:
                     if self.is_collision_free(node1, node2):
-                        # Добавляем в обе стороны (ненаправленный граф)
+                        # Добавляем в обе стороны (неориентированный граф)
                         cost = self.distance(node1, node2)
-                        self.graph[node1].append((node2, cost))
-                        self.graph[node2].append((node1, cost))
+                        self.graph[node1].append((node2, cost, 'default'))
+                        self.graph[node2].append((node1, cost, 'default'))
                         # Сохраняем шаг для визуализации
                         self.visualization_steps.append(('edge', (node1, node2)))
+
+    def add_bridge_edges(self):
+        for bridge in self.bridges:
+            ox, oy, ow, oh = bridge
+            first_p, second_p = None, None
+            if ow < oh:
+                first_p, second_p = (ox + ow / 2, oy), (ox + ow / 2, oy + oh)
+            else:
+                first_p, second_p = (ox, oy + oh / 2), (ox + ow, oy + oh / 2)
+
+            self.nodes.append(first_p)
+            self.graph[first_p] = []
+            # Сохраняем шаг для визуализации
+            self.visualization_steps.append(('point', first_p))
+
+            self.nodes.append(second_p)
+            self.graph[second_p] = []
+            # Сохраняем шаг для визуализации
+            self.visualization_steps.append(('point', second_p))
+
+            # Добавляем в обе стороны (неориентированный граф)
+            cost = self.distance(first_p, second_p)
+            self.graph[first_p].append((second_p, cost, 'pedestrian_crossings'))
+            self.graph[second_p].append((first_p, cost, 'pedestrian_crossings'))
+            # Сохраняем шаг для визуализации
+            self.visualization_steps.append(('edge', (first_p, second_p)))
 
     def is_point_free(self, point):
         """Проверяет минимальное евклидово расстояние до препятствий"""
@@ -185,49 +263,6 @@ class PRM:
             return (C[1] - A[1]) * (B[0] - A[0]) > (B[1] - A[1]) * (C[0] - A[0])
 
         return ccw(p1, p3, p4) != ccw(p2, p3, p4) and ccw(p1, p2, p3) != ccw(p1, p2, p4)
-
-    def find_path(self, start, end):
-        """Находит путь от start до end с помощью A* (реальные координаты)"""
-        if start not in self.graph or end not in self.graph:
-            return None
-
-        # Эвристика - евклидово расстояние
-        def heuristic(node):
-            return self.distance(node, end)
-
-        # A* алгоритм
-        open_set = {start}
-        came_from = {}
-        g_score = {node: float('inf') for node in self.graph}
-        g_score[start] = 0
-        f_score = {node: float('inf') for node in self.graph}
-        f_score[start] = heuristic(start)
-
-        while open_set:
-            current = min(open_set, key=lambda node: f_score[node])
-
-            if current == end:
-                # Восстанавливаем путь
-                path = []
-                while current in came_from:
-                    path.append(current)
-                    current = came_from[current]
-                path.append(start)
-                return path[::-1]
-
-            open_set.remove(current)
-
-            for neighbor, cost in self.graph[current]:
-                tentative_g_score = g_score[current] + cost
-
-                if tentative_g_score < g_score[neighbor]:
-                    came_from[neighbor] = current
-                    g_score[neighbor] = tentative_g_score
-                    f_score[neighbor] = tentative_g_score + heuristic(neighbor)
-                    if neighbor not in open_set:
-                        open_set.add(neighbor)
-
-        return None
 
     def get_map_bounds(self, buildings_data, margin_ratio=0.1):
         """
@@ -353,17 +388,18 @@ class PRM:
                 id = saved_points[point]
                 with conn.begin():
                     for edge in self.graph[point]:
-                        coords, _ = edge
+                        coords, _, edge_type = edge
                         second_id = saved_points[coords]
 
                         insert_point_stmt = sa.text("""
-                                                                                INSERT INTO edge (parent_id, child_id)
-                                                                                VALUES (:first, :second)
+                                                                                INSERT INTO edge (parent_id, child_id, edge_type)
+                                                                                VALUES (:first, :second, :third)
                                                                             """)
 
                         conn.execute(insert_point_stmt, {
                             "first": id,
-                            "second": second_id
+                            "second": second_id,
+                            "third" : edge_type
                         })
 
         print("✅ Карта построена")

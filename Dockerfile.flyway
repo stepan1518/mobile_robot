@@ -11,7 +11,7 @@ RUN pip install --no-cache-dir \
     cbor2==5.7.1 \
     pyzmq==27.1.0
 
-ARG VERSION=2.3
+ARG VERSION=2.3.1
 
 COPY --chown=flyway:flyway ./resources/migration/sql /flyway/sql
 COPY --chown=flyway:flyway ./resources/flyway.conf /flyway/conf/flyway.conf
