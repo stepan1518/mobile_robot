@@ -9,4 +9,10 @@ RUN pip install --no-cache-dir \
     sqlalchemy==2.0.44 \
     psycopg2-binary==2.9.11 \
     cbor2==5.7.1 \
-    pyzmq==27.1.0 \
+    pyzmq==27.1.0
+
+ARG VERSION=2.3
+
+COPY --chown=flyway:flyway ./resources/migration/sql /flyway/sql
+COPY --chown=flyway:flyway ./resources/flyway.conf /flyway/conf/flyway.conf
+COPY --chown=flyway:flyway ./zmqRemoteApi /coppeliaSim/zmqRemoteApi
