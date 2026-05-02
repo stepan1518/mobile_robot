@@ -74,10 +74,10 @@ def parse_buildings():
         max_y = sim.getObjectFloatParam(body_handle, sim.objfloatparam_modelbbox_max_y)
 
         # Мировые координаты AABB
-        world_min_x = cx + min_x
-        world_min_y = cy + min_y
-        world_max_x = cx + max_x
-        world_max_y = cy + max_y
+        world_min_x = min_x + cx
+        world_min_y = min_y + cy
+        world_max_x = max_x + cx
+        world_max_y = max_y + cy
 
         map_buildings.append({
             "building": name,

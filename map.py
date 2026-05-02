@@ -32,7 +32,7 @@ for point_id in city_map.vertices.keys():
         city_map.graph[-1][point_id] = distance
 
 ids = city_map.vertices.keys()
-path = city_map.findShortestPath(-1, random.choice(ids))
+path = city_map.findShortestPath(-1, 3407)
 
 plt.scatter([v[1][0] for v in city_map.vertices.items()], [v[1][1] for v in city_map.vertices.items()])
 for v_name in city_map.vertices.keys():
@@ -69,7 +69,5 @@ for id in path:
     path_to_execute.append((id, x, y))
 
 robot.execute_path(path_to_execute)
-# for nextDummy in path:
-#     robot.moveToPoint(city_map.vertices[nextDummy])
 
 print('Робот прибыл')

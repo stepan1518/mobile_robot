@@ -1,6 +1,7 @@
 import os
 import sys
 import sqlalchemy as sa
+import math
 
 sys.path.insert(0, '/coppeliaSim/zmqRemoteApi/clients/python/src')
 
@@ -24,18 +25,35 @@ def parse_roads_and_crossings():
     for handle in all_objects:
         alias = sim.getObjectAlias(handle)
 
-        # Проверяем дорогу по имени
-        if 'road' in alias.lower():
-            # Позиция body в мировых координатах
+        if 'road' in alias.lower() or 'pedestrian_crossing' in alias.lower():
             floor_handle = sim.getObject('./floor')
+
+            # Получаем позицию объекта в мировых координатах
             pos = sim.getObjectPosition(handle, floor_handle)
             cx, cy, cz = pos
 
-            # Локальный BB body
+            # Получаем ориентацию относительно пола (или мира)
+            orientation = sim.getObjectOrientation(handle, floor_handle)
+            # ориентация: [alpha, beta, gamma] -> вращение вокруг X, Y, Z
+            # В большинстве случаев поворот в плоскости XY определяется углом gamma (Z)
+            gamma = orientation[2]  # радианы
+
+            # Локальный bounding box
             min_x = sim.getObjectFloatParam(handle, sim.objfloatparam_modelbbox_min_x)
             min_y = sim.getObjectFloatParam(handle, sim.objfloatparam_modelbbox_min_y)
             max_x = sim.getObjectFloatParam(handle, sim.objfloatparam_modelbbox_max_x)
             max_y = sim.getObjectFloatParam(handle, sim.objfloatparam_modelbbox_max_y)
+
+            # Если объект повёрнут примерно на 90° (вертикальный), меняем оси местами
+            # Проверяем: abs(gamma) близок к pi/2 или 3pi/2
+            if abs(abs(gamma) - math.pi / 2) < 0.1 or abs(abs(gamma) - 3 * math.pi / 2) < 0.1:
+                # Меняем width и height: это эквивалентно повороту на 90°
+                # Новый min/max = старый min_y, max_y для X, и старый min_x, max_x для Y
+                new_min_x = min_y
+                new_max_x = max_y
+                new_min_y = min_x
+                new_max_y = max_x
+                min_x, max_x, min_y, max_y = new_min_x, new_max_x, new_min_y, new_max_y
 
             # Мировые координаты AABB
             world_min_x = cx + min_x
@@ -43,14 +61,20 @@ def parse_roads_and_crossings():
             world_max_x = cx + max_x
             world_max_y = cy + max_y
 
-            roads.append({
+            item = {
                 "name": alias,
                 "x1": round(world_min_x, 3),
                 "y1": round(world_min_y, 3),
                 "x2": round(world_max_x, 3),
                 "y2": round(world_max_y, 3)
-            })
-            print(f"Найдена дорога: {alias} ({world_min_x:.1f}, {world_min_y:.1f})")
+            }
+
+            if 'road' in alias.lower():
+                roads.append(item)
+                print(f"Найдена дорога: {alias} (gamma={math.degrees(gamma):.1f}°)")
+            else:
+                crossings.append(item)
+                print(f"Найден пешеходный переход: {alias} (gamma={math.degrees(gamma):.1f}°)")
 
         # Проверяем пешеходный переход по имени
         elif 'pedestrian_crossing' in alias.lower():

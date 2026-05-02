@@ -1,6 +1,8 @@
 FROM flyway/flyway:11.18.0-alpine
 
-RUN apk add --no-cache python3 py3-pip
+RUN apk add --no-cache python3 py3-pip \
+    sdl2-dev sdl2_image-dev sdl2_mixer-dev sdl2_ttf-dev \
+    pkgconfig gcc musl-dev python3-dev
 
 RUN python3 -m venv /flyway/venv
 ENV PATH="/flyway/venv/bin:$PATH"
@@ -9,9 +11,17 @@ RUN pip install --no-cache-dir \
     sqlalchemy==2.0.44 \
     psycopg2-binary==2.9.11 \
     cbor2==5.7.1 \
-    pyzmq==27.1.0
+    pyzmq==27.1.0 \
+    pygame==2.6.1
 
-ARG VERSION=2.3.1
+# Удаляем только заголовочные файлы и компиляторы, оставляя runtime-библиотеки
+RUN apk del sdl2-dev sdl2_image-dev sdl2_mixer-dev sdl2_ttf-dev \
+    pkgconfig gcc musl-dev python3-dev
+
+# Добавляем runtime-пакеты, если они не остались (на всякий случай)
+RUN apk add --no-cache sdl2 sdl2_image sdl2_mixer sdl2_ttf
+
+ARG VERSION=2.3.3
 
 COPY --chown=flyway:flyway ./resources/migration/sql /flyway/sql
 COPY --chown=flyway:flyway ./resources/flyway.conf /flyway/conf/flyway.conf

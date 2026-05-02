@@ -5,6 +5,8 @@ services:
       dockerfile: Dockerfile.flyway
     env_file:
       - ${ENV_PROPERTIES}
+    volumes:
+      - ./resources/migration/map_image:/flyway/output:rw
     command: migrate
     extra_hosts:
       - "host.docker.internal:host-gateway"

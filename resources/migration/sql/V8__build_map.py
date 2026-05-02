@@ -3,8 +3,8 @@ import math
 import sys
 import sqlalchemy as sa
 import os
+import pygame
 
-# Цвета
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
 RED = (255, 0, 0)
@@ -12,21 +12,16 @@ GREEN = (0, 255, 0)
 BLUE = (0, 100, 255)
 GRAY = (200, 200, 200)
 DARK_GRAY = (100, 100, 100)
+ORANGE = (255, 165, 0)
+LIGHT_BLUE = (173, 216, 230)
 
 
 class PRM:
-    def __init__(self, n_samples=300, safety_margin = 1):
-        """
-        Args:
-            map_bounds: (min_x, min_y, max_x, max_y) реальные границы карты
-            obstacles: препятствия в реальных координатах (x, y, width, height)
-            n_samples: количество точек
-            connection_radius: радиус соединения в реальных координатах
-        """
+    def __init__(self, n_samples=300, safety_margin=1):
         self.n_samples = n_samples
         self.nodes = []
         self.graph = {}
-        self.visualization_steps = []  # Для анимации построения
+        self.visualization_steps = []
         self.safety_margin = safety_margin
         self.status = 0
 
@@ -44,45 +39,39 @@ class PRM:
         pedestrian_crossings = self.get_pedestrian_crossings()
         if buildings == -1 or roads == -1 or pedestrian_crossings == -1:
             self.status = -1
+            return
 
-        # Преобразуем в формат (x, y, width, height) в реальных координатах
-        # Препятствия
-        self.obstacles = [
-            (
-                float(b['x1']),
-                float(b['y1']),
-                float(b['x2']) - float(b['x1']),
-                float(b['y2']) - float(b['y1'])
-            )
-            for b in buildings
-        ]
+        # Препятствия (здания)
+        self.obstacles = []
+        for b in buildings:
+            x1, y1, x2, y2 = float(b['x1']), float(b['y1']), float(b['x2']), float(b['y2'])
+            min_x, max_x = min(x1, x2), max(x1, x2)
+            min_y, max_y = min(y1, y2), max(y1, y2)
+            self.obstacles.append((min_x, min_y, max_x - min_x, max_y - min_y))
 
-        for road in roads:
-            self.obstacles.append((
-                float(road['x1']),
-                float(road['y1']),
-                float(road['x2']) - float(road['x1']),
-                float(road['y2']) - float(road['y1'])
-            ))
+        # Дороги (отдельно, чтобы рисовать другим цветом)
+        self.road_rects = []
+        for r in roads:
+            x1, y1, x2, y2 = float(r['x1']), float(r['y1']), float(r['x2']), float(r['y2'])
+            min_x, max_x = min(x1, x2), max(x1, x2)
+            min_y, max_y = min(y1, y2), max(y1, y2)
+            rect = (min_x, min_y, max_x - min_x, max_y - min_y)
+            self.road_rects.append(rect)
+            self.obstacles.append(rect)  # дороги тоже препятствия для поиска пути
 
-        #Мосты (пешеходные переходы, мосты через реку и тп)
-        self.bridges = [
-            (
-                float(pc['x1']),
-                float(pc['y1']),
-                float(pc['x2']) - float(pc['x1']),
-                float(pc['y2']) - float(pc['y1'])
-            )
-            for pc in pedestrian_crossings
-        ]
+        # Мосты (пешеходные переходы)
+        self.bridges = []
+        for pc in pedestrian_crossings:
+            x1, y1, x2, y2 = float(pc['x1']), float(pc['y1']), float(pc['x2']), float(pc['y2'])
+            min_x, max_x = min(x1, x2), max(x1, x2)
+            min_y, max_y = min(y1, y2), max(y1, y2)
+            self.bridges.append((min_x, min_y, max_x - min_x, max_y - min_y))
 
         self.map_bounds = self.get_map_bounds(buildings, margin_ratio=0.1)
-
         self.min_x, self.min_y, self.max_x, self.max_y = self.map_bounds
 
-        # Вычисляем адекватный радиус соединения (10% от диагонали карты)
-        map_width = self.map_bounds[2] - self.map_bounds[0]
-        map_height = self.map_bounds[3] - self.map_bounds[1]
+        map_width = self.max_x - self.min_x
+        map_height = self.max_y - self.min_y
         diagonal = math.sqrt(map_width ** 2 + map_height ** 2)
         self.connection_radius = diagonal * 0.1
 
@@ -92,320 +81,238 @@ class PRM:
         self.close()
 
     def get_buildings(self):
-        buildings = []
-
         try:
             with self.engine.connect() as conn:
-                request = sa.text("""SELECT * FROM building bu JOIN body b ON b.id = bu.body_id""")
+                request = sa.text("SELECT * FROM building bu JOIN body b ON b.id = bu.body_id")
                 result = conn.execute(request)
-                buildings = [dict(row._mapping) for row in result]
+                return [dict(row._mapping) for row in result]
         except Exception as e:
-            print(f"Error: {e}")
+            print(f"Error loading buildings: {e}")
             return -1
-
-        return buildings
 
     def get_roads(self):
-        roads = []
-
         try:
             with self.engine.connect() as conn:
-                request = sa.text("""SELECT * FROM road r JOIN body b ON b.id = r.body_id""")
+                request = sa.text("SELECT * FROM road r JOIN body b ON b.id = r.body_id")
                 result = conn.execute(request)
-                roads = [dict(row._mapping) for row in result]
+                return [dict(row._mapping) for row in result]
         except Exception as e:
-            print(f"Error: {e}")
+            print(f"Error loading roads: {e}")
             return -1
-
-        return roads
 
     def get_pedestrian_crossings(self):
-        pedestrian_crossings = []
-
         try:
             with self.engine.connect() as conn:
-                request = sa.text("""SELECT * FROM pedestrian_crossing pc JOIN body b ON b.id = pc.body_id""")
+                request = sa.text("SELECT * FROM pedestrian_crossing pc JOIN body b ON b.id = pc.body_id")
                 result = conn.execute(request)
-                pedestrian_crossings = [dict(row._mapping) for row in result]
+                return [dict(row._mapping) for row in result]
         except Exception as e:
-            print(f"Error: {e}")
+            print(f"Error loading pedestrian crossings: {e}")
             return -1
 
-        return pedestrian_crossings
-
     def build_roadmap(self):
-        """Строит вероятностную дорожную карту"""
         self.nodes = []
         self.graph = {}
         self.visualization_steps = []
-
         self.add_bridge_edges()
-
-        # 1. Генерация случайных точек
         self.generate_free_points()
-
-        # 2. Соединение соседних точек
         self.connect_neighbors()
-
         return self.graph
 
     def generate_free_points(self):
-        """Генерирует точки в свободном пространстве (реальные координаты)"""
         attempts = 0
         max_attempts = self.n_samples * 3
-
         while len(self.nodes) < self.n_samples and attempts < max_attempts:
-            # Генерируем в реальных границах
             point = (
                 random.uniform(self.min_x, self.max_x),
                 random.uniform(self.min_y, self.max_y)
             )
-
             if self.is_point_free(point):
                 self.nodes.append(point)
                 self.graph[point] = []
-                # Сохраняем шаг для визуализации
                 self.visualization_steps.append(('point', point))
-
             attempts += 1
 
     def connect_neighbors(self):
-        """Соединяет точки в радиусе connection_radius (реальные координаты)"""
         for i, node1 in enumerate(self.nodes):
             for j, node2 in enumerate(self.nodes):
                 if i < j and self.distance(node1, node2) <= self.connection_radius:
                     if self.is_collision_free(node1, node2):
-                        # Добавляем в обе стороны (неориентированный граф)
                         cost = self.distance(node1, node2)
                         self.graph[node1].append((node2, cost, 'default'))
                         self.graph[node2].append((node1, cost, 'default'))
-                        # Сохраняем шаг для визуализации
                         self.visualization_steps.append(('edge', (node1, node2)))
 
     def add_bridge_edges(self):
         for bridge in self.bridges:
             ox, oy, ow, oh = bridge
-            first_p, second_p = None, None
+            left_x, right_x = ox, ox + ow
+            bottom_y, top_y = oy, oy + oh
             if ow < oh:
-                first_p, second_p = (ox + ow / 2, oy), (ox + ow / 2, oy + oh)
+                first_p = (ox + ow / 2, bottom_y)
+                second_p = (ox + ow / 2, top_y)
             else:
-                first_p, second_p = (ox, oy + oh / 2), (ox + ow, oy + oh / 2)
-
+                first_p = (left_x, oy + oh / 2)
+                second_p = (right_x, oy + oh / 2)
             self.nodes.append(first_p)
             self.graph[first_p] = []
-            # Сохраняем шаг для визуализации
             self.visualization_steps.append(('point', first_p))
-
             self.nodes.append(second_p)
             self.graph[second_p] = []
-            # Сохраняем шаг для визуализации
             self.visualization_steps.append(('point', second_p))
-
-            # Добавляем в обе стороны (неориентированный граф)
             cost = self.distance(first_p, second_p)
             self.graph[first_p].append((second_p, cost, 'pedestrian_crossings'))
             self.graph[second_p].append((first_p, cost, 'pedestrian_crossings'))
-            # Сохраняем шаг для визуализации
             self.visualization_steps.append(('edge', (first_p, second_p)))
 
     def is_point_free(self, point):
-        """Проверяет минимальное евклидово расстояние до препятствий"""
         x, y = point
-
-        for obstacle in self.obstacles:
-            ox, oy, ow, oh = obstacle
-
-            # Находим ближайшую точку на прямоугольнике к нашей точке
+        for (ox, oy, ow, oh) in self.obstacles:
             closest_x = max(ox, min(x, ox + ow))
             closest_y = max(oy, min(y, oy + oh))
-
-            # Вычисляем расстояние
-            distance = math.sqrt((x - closest_x) ** 2 + (y - closest_y) ** 2)
-
-            # Если расстояние меньше безопасной зоны
-            if distance < self.safety_margin:
+            dist = math.sqrt((x - closest_x) ** 2 + (y - closest_y) ** 2)
+            if dist < self.safety_margin:
                 return False
-
         return True
 
-    def distance(self, pos1, pos2):
-        """Евклидово расстояние между двумя точками (реальные координаты)"""
-        return math.sqrt((pos1[0] - pos2[0]) ** 2 + (pos1[1] - pos2[1]) ** 2)
-
     def is_collision_free(self, pos1, pos2):
-        """Проверяет, нет ли столкновений на пути между двумя точками (реальные координаты)"""
-        for obstacle in self.obstacles:
-            if self.line_rectangle_collision(pos1, pos2, obstacle):
+        for obs in self.obstacles:
+            if self.line_rectangle_collision(pos1, pos2, obs):
                 return False
         return True
 
     def line_rectangle_collision(self, p1, p2, rect):
-        """Проверяет пересечение линии с прямоугольником (реальные координаты)"""
         x, y, w, h = rect
-
-        # Проверяем пересечение с каждой стороной прямоугольника
         lines = [
-            [(x, y), (x + w, y)],  # верх
-            [(x + w, y), (x + w, y + h)],  # право
-            [(x + w, y + h), (x, y + h)],  # низ
-            [(x, y + h), (x, y)]  # лево
+            [(x, y), (x + w, y)],
+            [(x + w, y), (x + w, y + h)],
+            [(x + w, y + h), (x, y + h)],
+            [(x, y + h), (x, y)]
         ]
-
         for line in lines:
             if self.line_line_collision(p1, p2, line[0], line[1]):
                 return True
         return False
 
     def line_line_collision(self, p1, p2, p3, p4):
-        """Проверяет пересечение двух отрезков (реальные координаты)"""
-
         def ccw(A, B, C):
             return (C[1] - A[1]) * (B[0] - A[0]) > (B[1] - A[1]) * (C[0] - A[0])
-
         return ccw(p1, p3, p4) != ccw(p2, p3, p4) and ccw(p1, p2, p3) != ccw(p1, p2, p4)
 
+    def distance(self, pos1, pos2):
+        return math.sqrt((pos1[0] - pos2[0]) ** 2 + (pos1[1] - pos2[1]) ** 2)
+
     def get_map_bounds(self, buildings_data, margin_ratio=0.1):
-        """
-        Определяет реальные границы карты на основе зданий
-
-        Args:
-            buildings_data: Список словарей с координатами зданий
-            margin_ratio: Отступ от крайних зданий (в процентах от размера)
-
-        Returns:
-            tuple: (min_x, min_y, max_x, max_y)
-        """
-        if not buildings_data:
-            return (0, 0, 1000, 700)  # Дефолтные значения
-
-        # Собираем все координаты
-        all_x = []
-        all_y = []
-
+        all_x, all_y = [], []
         for b in buildings_data:
-            all_x.append(float(b['x1']))
-            all_x.append(float(b['x2']))
-            all_y.append(float(b['y1']))
-            all_y.append(float(b['y2']))
+            all_x.extend([float(b['x1']), float(b['x2'])])
+            all_y.extend([float(b['y1']), float(b['y2'])])
 
-        # Находим границы
-        min_x = min(all_x)
-        max_x = max(all_x)
-        min_y = min(all_y)
-        max_y = max(all_y)
+        if hasattr(self, 'obstacles'):
+            for obs in self.obstacles:
+                all_x.append(obs[0])
+                all_x.append(obs[0] + obs[2])
+                all_y.append(obs[1])
+                all_y.append(obs[1] + obs[3])
+        if hasattr(self, 'bridges'):
+            for br in self.bridges:
+                all_x.append(br[0])
+                all_x.append(br[0] + br[2])
+                all_y.append(br[1])
+                all_y.append(br[1] + br[3])
 
-        # Добавляем отступ
-        width = max_x - min_x
-        height = max_y - min_y
+        if not all_x:
+            return (0, 0, 1000, 700)
 
-        margin_x = width * margin_ratio
-        margin_y = height * margin_ratio
+        min_x, max_x = min(all_x), max(all_x)
+        min_y, max_y = min(all_y), max(all_y)
 
-        return (
-            min_x,
-            min_y,
-            max_x,
-            max_y
-        )
-
-    def real_to_screen(self, point, map_bounds, screen_size):
-        """
-        Преобразует реальные координаты в экранные
-
-        Args:
-            point: (x, y) реальные координаты
-            map_bounds: (min_x, min_y, max_x, max_y) границы реальной карты
-            screen_size: (width, height) размер окна PyGame
-
-        Returns:
-            tuple: (screen_x, screen_y)
-        """
-        min_x, min_y, max_x, max_y = map_bounds
-        screen_width, screen_height = screen_size
-
-        # Линейное преобразование
-        screen_x = ((point[0] - min_x) / (max_x - min_x)) * screen_width
-        screen_y = ((point[1] - min_y) / (max_y - min_y)) * screen_height
-
-        # Инвертируем Y (в PyGame Y увеличивается вниз)
-        screen_y = screen_height - screen_y
-
-        return (int(screen_x), int(screen_y))
-
-    def screen_to_real(self, point, map_bounds, screen_size):
-        """
-        Преобразует экранные координаты в реальные
-
-        Args:
-            point: (x, y) экранные координаты
-            map_bounds: (min_x, min_y, max_x, max_y) границы реальной карты
-            screen_size: (width, height) размер окна PyGame
-
-        Returns:
-            tuple: (real_x, real_y)
-        """
-        min_x, min_y, max_x, max_y = map_bounds
-        screen_width, screen_height = screen_size
-        screen_x, screen_y = point
-
-        # Инвертируем Y
-        screen_y = screen_height - screen_y
-
-        # Линейное преобразование
-        real_x = min_x + (screen_x / screen_width) * (max_x - min_x)
-        real_y = min_y + (screen_y / screen_height) * (max_y - min_y)
-
-        return (real_x, real_y)
+        return (min_x + 15, min_y, max_x - 5, max_y)
 
     def flush(self):
         saved_points = {}
-
         with self.engine.connect() as conn:
-            print("Читим старый граф карты...")
+            print("Чистим старый граф карты...")
             with conn.begin():
                 conn.execute(sa.text("DELETE FROM edge"))
                 conn.execute(sa.text("DELETE FROM point"))
-
             print("Добавляем вершины...")
             for point in self.nodes:
                 with conn.begin():
-                    insert_point_stmt = sa.text("""
-                                                        INSERT INTO point (x, y)
-                                                        VALUES (:x, :y)
-                                                        RETURNING id
-                                                    """)
-                    x, y = point
-                    result = conn.execute(insert_point_stmt, {
-                        "x": x,
-                        "y": y
-                    })
-
+                    result = conn.execute(
+                        sa.text("INSERT INTO point (x, y) VALUES (:x, :y) RETURNING id"),
+                        {"x": point[0], "y": point[1]}
+                    )
                     point_id = result.scalar_one()
                     saved_points[point] = point_id
-
             print("Добавляем рёбра...")
-            for point in saved_points.keys():
-                id = saved_points[point]
-                with conn.begin():
-                    for edge in self.graph[point]:
-                        coords, _, edge_type = edge
-                        second_id = saved_points[coords]
-
-                        insert_point_stmt = sa.text("""
-                                                                                INSERT INTO edge (parent_id, child_id, edge_type)
-                                                                                VALUES (:first, :second, :third)
-                                                                            """)
-
-                        conn.execute(insert_point_stmt, {
-                            "first": id,
-                            "second": second_id,
-                            "third" : edge_type
-                        })
-
+            for point, point_id in saved_points.items():
+                for neighbor, cost, edge_type in self.graph[point]:
+                    nb_id = saved_points[neighbor]
+                    with conn.begin():
+                        conn.execute(
+                            sa.text("INSERT INTO edge (parent_id, child_id, edge_type) VALUES (:p, :c, :t)"),
+                            {"p": point_id, "c": nb_id, "t": edge_type}
+                        )
         print("✅ Карта построена")
 
     def close(self):
         self.engine.dispose()
+
+    def save_image(self, filename="map.png", image_size=(2400, 1600)):
+        """Сохраняет карту как PNG-изображение (без GUI)."""
+        pygame.init()
+        surface = pygame.Surface(image_size)
+        surface.fill(WHITE)
+
+        def world_to_pixel(point):
+            rx = (point[0] - self.min_x) / (self.max_x - self.min_x) * image_size[0]
+            ry = image_size[1] - (point[1] - self.min_y) / (self.max_y - self.min_y) * image_size[1]
+            return (int(rx), int(ry))
+
+        # Здания
+        for ox, oy, ow, oh in self.obstacles:
+            # Пропускаем дороги, чтобы не перерисовывать
+            if (ox, oy, ow, oh) in self.road_rects:
+                continue
+            top_left = world_to_pixel((ox, oy + oh))
+            bottom_right = world_to_pixel((ox + ow, oy))
+            rect = pygame.Rect(top_left, (bottom_right[0] - top_left[0], bottom_right[1] - top_left[1]))
+            pygame.draw.rect(surface, DARK_GRAY, rect)
+            pygame.draw.rect(surface, BLACK, rect, 2)
+
+        # Дороги (чёрный)
+        for ox, oy, ow, oh in self.road_rects:
+            top_left = world_to_pixel((ox, oy + oh))
+            bottom_right = world_to_pixel((ox + ow, oy))
+            rect = pygame.Rect(top_left, (bottom_right[0] - top_left[0], bottom_right[1] - top_left[1]))
+            pygame.draw.rect(surface, BLACK, rect)
+            pygame.draw.rect(surface, DARK_GRAY, rect, 2)  # рамка чуть светлее
+
+        # Мосты (пешеходные переходы)
+        for bx, by, bw, bh in self.bridges:
+            top_left = world_to_pixel((bx, by + bh))
+            bottom_right = world_to_pixel((bx + bw, by))
+            rect = pygame.Rect(top_left, (bottom_right[0] - top_left[0], bottom_right[1] - top_left[1]))
+            pygame.draw.rect(surface, LIGHT_BLUE, rect)
+            pygame.draw.rect(surface, BLUE, rect, 2)
+
+        # Рёбра
+        for node1, edges in self.graph.items():
+            for node2, cost, etype in edges:
+                p1 = world_to_pixel(node1)
+                p2 = world_to_pixel(node2)
+                color = GREEN if etype == 'default' else ORANGE
+                pygame.draw.line(surface, color, p1, p2, 1)
+
+        # Вершины
+        for node in self.nodes:
+            pos = world_to_pixel(node)
+            pygame.draw.circle(surface, RED, pos, 4)
+
+        pygame.image.save(surface, filename)
+        print(f"✅ Карта сохранена как {filename}")
+        pygame.quit()
 
 
 def main():
@@ -419,9 +326,8 @@ def main():
     print(f"Построено узлов: {len(prm.nodes)}")
     print(f"Рёбер: {sum(len(neighbors) for neighbors in prm.graph.values()) // 2}")
 
-    # Сохраняем в БД
     prm.flush()
-
+    prm.save_image("/flyway/output/map.bmp")
     sys.exit()
 
 

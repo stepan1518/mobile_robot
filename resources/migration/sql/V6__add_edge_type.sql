@@ -1,1 +1,1 @@
-ALTER TABLE edge ADD COLUMN edge_type varchar(255);
+ALTER TABLE edge ADD COLUMN IF NOT EXISTS edge_type varchar(255);
