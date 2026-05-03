@@ -1,6 +1,8 @@
 import time
 import numpy as np
 
+from kafka.observer import WaitTrafficLightObserver
+
 
 class ZMQRobot:
     robotName = 'MobileRobot'
@@ -9,7 +11,7 @@ class ZMQRobot:
     connection = None
     distanceTreshHold = 0.31
 
-    def __init__(self, connection):
+    def __init__(self, connection, kafkaService):
         self.connection = connection
         self.sim = connection.getObject('sim')
 
@@ -18,7 +20,19 @@ class ZMQRobot:
         self.target_handle = self.sim.getObject(f'./{self.target_point}')
         self.floor_handle = self.sim.getObject(f'./{self.floor}')
 
-    def moveToPoint(self, point_handle):
+        self.kafkaService = kafkaService
+
+    def moveToPoint(self, point_handle, edge_type):
+
+        #Если пешеходный переход - устанавливаем наблюдатель за состоянием светофора
+        #Наблюдатель обрабатывает сообщения событий камеры
+        if edge_type == 'pedestrian_crossings':
+            observer = WaitTrafficLightObserver()
+            self.kafkaService.register_observer('traffic_light', observer)
+
+            while not(observer.is_green()):
+                time.sleep(0.1)
+            self.kafkaService.unregister_observer('traffic_light', observer)
 
         target_position = self.sim.getObjectPosition(point_handle, self.floor_handle)
 
@@ -66,7 +80,7 @@ class ZMQRobot:
         try:
             print(f"Начинаем выполнение пути из {len(path_points)} точек.")
 
-            for point_id, x, y in path_points:
+            for point_id, x, y, edge_type in path_points:
                 # Создаём dummy
                 dummy_handle = self.sim.createDummy(0.1)  # размер 0.1 м
                 if dummy_handle == -1:
@@ -80,20 +94,20 @@ class ZMQRobot:
                 pos = [x, y, 0]  # чуть выше, чтобы было видно
                 self.sim.setObjectPosition(dummy_handle, self.floor_handle, pos)
 
-                created_dummies.append(dummy_handle)
+                created_dummies.append((dummy_handle, edge_type))
 
                 print(f"Создана waypoint dummy id={point_id} на ({x:.3f}, {y:.3f})")
 
             # Едем к этой точке (используем основной target)
-            for point_handle in created_dummies:
-                self.moveToPoint(point_handle)
+            for point_handle, edge_type in created_dummies:
+                self.moveToPoint(point_handle, edge_type)
 
             print("Путь полностью пройден!")
 
         finally:
             # УДАЛЕНИЕ всех созданных dummy (даже если ошибка)
             print("Удаляем waypoint dummy...")
-            for handle in created_dummies:
+            for handle, _ in created_dummies:
                 self.sim.removeObject(handle)
             print("Все waypoint'ы удалены.")
 

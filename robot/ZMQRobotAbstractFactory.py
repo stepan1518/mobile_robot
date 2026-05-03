@@ -27,10 +27,10 @@ class ZMQRobotAbstractFactory:
         return connection
 
     @staticmethod
-    def createRobot():
+    def createRobot(kafkaService):
         global robot
 
         if robot == None:
-            robot = ZMQRobot(ZMQRobotAbstractFactory.createConnection())
+            robot = ZMQRobot(ZMQRobotAbstractFactory.createConnection(), kafkaService)
 
         return robot

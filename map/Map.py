@@ -9,7 +9,7 @@ class Map:
 
     def __init__(self, db_connection):
         self.dbConnection = db_connection
-        result = self.dbConnection.execute("SELECT p.x, p.y, p2.x, p2.y, p.id, p2.id FROM point p "
+        result = self.dbConnection.execute("SELECT p.x, p.y, p2.x, p2.y, p.id, p2.id, e.edge_type FROM point p "
                                     "LEFT JOIN edge e ON p.id = e.parent_id "
                                     "LEFT JOIN point p2 ON p2.id = e.child_id")
 
@@ -21,7 +21,7 @@ class Map:
         self.graph = {}
 
         for edge in self.edges:
-            x1, y1, x2, y2, id1, id2 = edge
+            x1, y1, x2, y2, id1, id2, edge_type = edge
 
             # Рассчитываем расстояние между точками
             if x1 is not None and y1 is not None and x2 is not None and y2 is not None:
@@ -33,12 +33,12 @@ class Map:
                 if id2 not in self.graph:
                     self.graph[id2] = {}
 
-                self.graph[id1][id2] = distance
-                self.graph[id2][id1] = distance
+                self.graph[id1][id2] = (distance, edge_type)
+                self.graph[id2][id1] = (distance, edge_type)
 
         self.vertices = {}
         for edje in self.edges:
-            x1, y1, x2, y2, id1, id2 = edje
+            x1, y1, x2, y2, id1, id2, _ = edje
 
             self.vertices[id1] = (float(x1), float(y1))
             if x2 and y2:
@@ -76,8 +76,16 @@ class Map:
             if current_node == end_id:
                 path = []
                 while current_node is not None:
-                    path.append(current_node)
-                    current_node = previous_nodes[current_node]
+                    edge_type = 'default'
+                    prev_node = None
+                    node_params = previous_nodes[current_node]
+                    if node_params:
+                        prev_node, edge_type = previous_nodes[current_node]
+                    else:
+                        prev_node = None
+
+                    path.append((current_node, edge_type))
+                    current_node = prev_node
                 return path[::-1]  # Разворачиваем путь
 
             # Если текущее расстояние больше известного, пропускаем
@@ -85,13 +93,14 @@ class Map:
                 continue
 
             # Обходим соседей
-            for neighbor, weight in self.graph[current_node].items():
+            for neighbor, edge_params in self.graph[current_node].items():
+                weight, edge_type = edge_params
                 distance = current_distance + weight
 
                 # Если нашли более короткий путь
                 if distance < distances[neighbor]:
                     distances[neighbor] = distance
-                    previous_nodes[neighbor] = current_node
+                    previous_nodes[neighbor] = (current_node, edge_type)
                     heapq.heappush(priority_queue, (distance, neighbor))
 
         # Если путь не найден
