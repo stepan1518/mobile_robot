@@ -3,6 +3,9 @@ import threading
 import json
 import logging
 
+from kafka.kafka_handler import KafkaMessageHandler
+
+
 class MessageObserver(ABC):
     """Подписчик на сообщения Kafka."""
 
@@ -54,3 +57,11 @@ class WaitTrafficLightObserver(MessageObserver):
         """Потокобезопасное чтение текущего состояния светофора."""
         with self._lock:
             return self._green
+
+class StatObserver(MessageObserver):
+
+    def __init__(self, handler: KafkaMessageHandler):
+        self.handler = handler
+
+    def on_message(self, message):
+        self.handler.handle(message)

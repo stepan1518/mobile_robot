@@ -3,22 +3,35 @@ import matplotlib.pyplot as plt
 import os
 
 from db import DBAbstractFactory
-from kafka import KafkaConsumerFactory, KafkaConsumerService
+from kafka import KafkaAbstractFactory, KafkaConsumerService, ProducerMessageHandler, StatObserver
 from map import Map
 from robot import ZMQRobotAbstractFactory
 
 
 edges = []
 
-consumer = KafkaConsumerFactory.create_realtime_consumer(
+consumer = KafkaAbstractFactory.create_realtime_consumer(
     bootstrap_servers=os.getenv('KAFKA_HOST', 'localhost:9094'),
     group_id=os.getenv('KAFKA_CONSUMER_GROUP', 'robot-server-group')
+)
+
+producer = KafkaAbstractFactory.create_producer(
+    bootstrap_servers=os.getenv('KAFKA_BOOTSTRAP_SERVERS', 'localhost:9094'),
+    client_id=os.getenv('KAFKA_CLIENT_ID', 'mobile-robot-controller')
 )
 
 service = KafkaConsumerService(
     consumer=consumer,
     topics=[os.getenv('KAFKA_TOPIC', 'camera_events_test')]
 )
+#Создаём наблюдатель для статистики
+handler = ProducerMessageHandler(
+    producer,
+    os.getenv('KAFKA_DETECTIONS_STAT_TOPIC', 'detections_stat'),
+    os.getenv('DETECTIONS_CONFIGURATION_VERSION', 2)
+)
+observer = StatObserver(handler)
+service.register_observer('*', observer)
 
 service.start()
 
@@ -83,4 +96,5 @@ for id, edge_type in path:
 robot.execute_path(path_to_execute)
 
 service.stop()
+producer.flush()
 print('Робот прибыл')
