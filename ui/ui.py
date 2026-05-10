@@ -51,11 +51,11 @@ class App:
         self.reconnect_btn.pack(side=tk.RIGHT)
 
         ttk.Label(main, text="Максимальная скорость").pack(anchor='w')
-        ttk.Scale(main, from_=0.1, to=10.0, variable=self.max_speed, orient=tk.HORIZONTAL,
+        ttk.Scale(main, from_=0.1, to=50.0, variable=self.max_speed, orient=tk.HORIZONTAL,
                   command=lambda e: self.send_params()).pack(fill=tk.X)
 
         ttk.Label(main, text="Чувствительность к препятствиям").pack(anchor='w', pady=(10,0))
-        ttk.Scale(main, from_=0.0, to=5.0, variable=self.obstacle_avoidance, orient=tk.HORIZONTAL,
+        ttk.Scale(main, from_=0.0, to=20.0, variable=self.obstacle_avoidance, orient=tk.HORIZONTAL,
                   command=lambda e: self.send_params()).pack(fill=tk.X)
 
         info_frame = ttk.Frame(main)

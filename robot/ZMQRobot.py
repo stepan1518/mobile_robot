@@ -9,7 +9,7 @@ class ZMQRobot:
     target_point = 'roba_boba_point'
     floor = 'floor'
     connection = None
-    distanceTreshHold = 0.31
+    distanceTreshHold = 0.5
 
     def __init__(self, connection, kafkaService):
         self.connection = connection
